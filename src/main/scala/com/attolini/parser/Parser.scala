@@ -1,7 +1,8 @@
 package com.attolini.parser
 
 import com.attolini.compiler.{Compiler, Location, ParserError}
-import com.attolini.lexer.{DOT, IDENTIFIER, LITERAL, Token}
+import com.attolini.lexer._
+
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{NoPosition, Position, Reader}
 
@@ -28,6 +29,11 @@ object Parser extends Parsers {
     (identifier ~ DOT() ~ identifier) ^^ { case schema ~ s ~ name => Table(schema.str + s.toString + name.str) }
   }
 
+  def columns: Parser[Columns] = positioned {
+    (LBRACKET() ~ rep(identifier ~ COMMA()) ~ identifier ~ RBRACKET()) ^^ {
+      case _ ~ inputs ~ IDENTIFIER(lastInput) ~ _ => Columns(inputs.map(_._1.str) ++ Seq(lastInput))
+    }
+  }
 //  case class AndThen(step1: WorkflowAST, step2: WorkflowAST) extends WorkflowAST
 //  case class ReadInput(inputs: Seq[String]) extends WorkflowAST
 //  case class CallService(serviceName: String) extends WorkflowAST
@@ -77,11 +83,18 @@ object Parser extends Parsers {
 //      )
 //  }
 
-  def program: Parser[AST] = { phrase(tableName) }
+  def program: Parser[AST] = positioned { phrase(stmnt) } // instructions
 
-//  def statement: Parser[AST] = positioned {
-//    insert
-//  }
+  def instructions: Parser[AST] = positioned { rep1(stmnt) ^^ { case stmtList => stmtList.head } }
+
+  def stmnt: Parser[AST] = positioned {
+    val insert = INSERTINTO() ^^ { _ =>
+      InsertInto
+    }
+
+    insert | tableName | columns
+  }
+
   def apply(tokens: Seq[Token]): Either[ParserError, AST] = {
     val reader = new QueryReader(tokens)
     program(reader) match {
@@ -98,7 +111,8 @@ object TestParser extends App {
 //      "VALUES " +
 //      "('verticali_nfc','list_entita', ['end_sin_sinistro_id','end_por_portafoglio_id','end_en_dan_id'],['end_en_dan_id ASC'],['end_sin_sinistro_id bigint','end_por_portafoglio_id bigint','end_en_dan_id bigint','end_liq_liquidatore_id bigint']);"
 
-  val input = "INSERT INTO config_verticali_nfc$create_table"
-  Compiler(input).getOrElse("")
+  val input =
+    "INSERT INTO config_verticali_nfc.create_table (keyspace_name,table_name,primary_key,clustering_order,all_fields)"
+  println(Compiler(input))
 
 }
