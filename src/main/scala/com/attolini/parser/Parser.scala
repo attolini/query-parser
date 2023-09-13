@@ -26,7 +26,7 @@ object Parser extends Parsers {
   }
 
   def tableName: Parser[Table] = positioned {
-    (identifier ~ DOT() ~ identifier) ^^ { case schema ~ s ~ name => Table(schema.str + s.toString + name.str) }
+    (identifier ~ DOT() ~ identifier) ^^ { case schema ~ s ~ name => Table(schema.str + "." + name.str) }
   }
 
   def columns: Parser[Columns] = positioned {
@@ -46,11 +46,11 @@ object Parser extends Parsers {
 //
 //  sealed trait Condition
 //  case class Equals(factName: String, factValue: String) extends Condition
-
-  val fileReader = scala.io.Source.fromResource("nfc_populate.cql")
-
-  val fileContent = fileReader.mkString //getLines.toList.mkString
-  val queries     = fileContent.split(";")
+//
+//  val fileReader = scala.io.Source.fromResource("nfc_populate.cql")
+//
+//  val fileContent = fileReader.mkString //getLines.toList.mkString
+//  val queries     = fileContent.split(";")
   //  println(queries.length)
 //  for (q <- queries) println(q)
 //
@@ -83,13 +83,16 @@ object Parser extends Parsers {
 //      )
 //  }
 
-  def program: Parser[AST] = positioned { phrase(stmnt) } // instructions
+  def program: Parser[AST] = positioned { phrase(instructions) }
 
-  def instructions: Parser[AST] = positioned { rep1(stmnt) ^^ { case stmtList => stmtList.head } }
+  def instructions: Parser[AST] = positioned { rep1(stmnt) ^^ { case stmtList => stmtList reduceRight NextStep } }
 
   def stmnt: Parser[AST] = positioned {
     val insert = INSERTINTO() ^^ { _ =>
       InsertInto
+    }
+    val values = VALUES() ^^ { _ =>
+      Values
     }
 
     insert | tableName | columns

@@ -6,6 +6,6 @@ case object InsertInto                extends AST
 case class Table(tableName: String)   extends AST
 case class Columns(cols: Seq[String]) extends AST
 
-case object Values extends AST
-
-case class Query(q: AST) extends AST
+case object Values                          extends AST
+case class NextStep(elem1: AST, elem2: AST) extends AST
+//case class Query(q: AST) extends AST
