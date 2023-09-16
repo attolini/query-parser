@@ -1,8 +1,7 @@
 package com.attolini.parser
 
-import com.attolini.compiler.{Compiler, Location, ParserError}
+import com.attolini.compiler.{CompilationError, Compiler, Location, ParserError}
 import com.attolini.lexer._
-import com.attolini.parser
 
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{NoPosition, Position, Reader}
@@ -115,7 +114,7 @@ object Parser extends Parsers {
     queryInsert | endQuery
   }
 
-  def instructions: Parser[AST] = positioned { rep1(query) ^^ { case stmtList => stmtList reduceRight NextStep } }
+  def instructions: Parser[AST] = positioned { rep1(query) ^^ { case stmtList => stmtList reduceRight Query } }
 
   def program: Parser[AST] = positioned { phrase(instructions) }
 
@@ -134,8 +133,32 @@ object TestParser extends App {
     "INSERT INTO config_verticali_nfc.create_table (keyspace_name,table_name,primary_key,clustering_order,all_fields) VALUES " +
       "('verticali_nfc','list_entita', ['end_sin_sinistro_id','end_por_portafoglio_id','end_en_dan_id'],['end_en_dan_id ASC'],['end_sin_sinistro_id bigint','end_por_portafoglio_id bigint','end_en_dan_id bigint','end_liq_liquidatore_id bigint']);"
 
-//  val input =
-//    "INSERT INTO config_verticali_nfc.create_table (keyspace_name,table_name,primary_key,clustering_order,all_fields) values ;"
-  println(Compiler(input))
+  val result: Either[CompilationError, AST] = Compiler(input)
 
+  case class MyQueryInsert(keyspaceName: String,
+                           tableName: String,
+                           primaryKey: Seq[String],
+                           clusteringOrder: Seq[String],
+                           allFields: Seq[String]) {
+    override def toString: String = {
+      s"""
+      |keyspace: $keyspaceName,
+      |table: $tableName,
+      |primary key: $primaryKey,
+      |clustering keys order: $clusteringOrder,
+      |all columns: $allFields
+      |
+      """.stripMargin
+
+    }
+  }
+
+  result.map { query =>
+    query.asInstanceOf[Query].elem1 match {
+      case insert: QueryInsert =>
+        val i = insert.insertValues.asInstanceOf[InsertListValue]
+        println(MyQueryInsert(i.keyspaceName, i.tableName, i.primaryKey, i.clusteringOrder, i.allFields))
+      case r => println("BOH\n" + r)
+    }
+  }
 }
