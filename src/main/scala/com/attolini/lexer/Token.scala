@@ -5,6 +5,7 @@ sealed trait Token extends Positional
 
 case class IDENTIFIER(str: String)  extends Token
 case class LITERAL(str: String)     extends Token
+case class NUMBER(num: String)      extends Token
 case class INDENTATION(spaces: Int) extends Token
 case class INSERTINTO()             extends Token
 case class VALUES()                 extends Token

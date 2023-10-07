@@ -21,6 +21,12 @@ object Lexer extends RegexParsers {
     }
   }
 
+  def number: Parser[NUMBER] = positioned {
+    "[0-9]".r ^^ { num =>
+      NUMBER(num)
+    }
+  }
+
   def indentation: Parser[INDENTATION] = positioned {
     "\n[ ]*".r ^^ { whitespace =>
       val nSpaces = whitespace.length - 1
@@ -88,9 +94,9 @@ object Lexer extends RegexParsers {
 
 object TestLexer extends App {
   val input: String =
-    "INSERT INTO config_verticali_nfc.create_table (keyspace_name,table_name,primary_key,clustering_order,all_fields) " +
+    "INSERT INTO keyspace.table (keyspace_name,table_name,primary_key) " +
       "VALUES " +
-      "('verticali_nfc','list_entita', ['end_sin_sinistro_id','end_por_portafoglio_id','end_en_dan_id'],['end_en_dan_id ASC'],['end_sin_sinistro_id bigint','end_por_portafoglio_id bigint','end_en_dan_id bigint','end_liq_liquidatore_id bigint']);"
+      "('ks','table_name', ['pk1','pk2','end_en_dan_id']);"
 
   println(Lexer(input))
 }

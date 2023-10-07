@@ -1,28 +1,32 @@
 package com.attolini.parser
 
-import com.attolini.compiler.{CompilationError, Compiler, Location, ParserError}
+import com.attolini.compiler.{Location, ParserError}
 import com.attolini.lexer._
 
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{NoPosition, Position, Reader}
 
-object Parser extends Parsers {
+class QueryReader(tokens: Seq[Token]) extends Reader[Token] {
+  override def first: Token        = tokens.head
+  override def rest: Reader[Token] = new QueryReader(tokens.tail)
+  override def pos: Position       = tokens.headOption.map(_.pos).getOrElse(NoPosition)
+  override def atEnd: Boolean      = tokens.isEmpty
+}
+
+class Parser extends Parsers {
 
   override type Elem = Token
 
-  class QueryReader(tokens: Seq[Token]) extends Reader[Token] {
-    override def first: Token        = tokens.head
-    override def rest: Reader[Token] = new QueryReader(tokens.tail)
-    override def pos: Position       = tokens.headOption.map(_.pos).getOrElse(NoPosition)
-    override def atEnd: Boolean      = tokens.isEmpty
-  }
-
-  private def identifier: Parser[IDENTIFIER] = positioned {
+  def identifier: Parser[IDENTIFIER] = positioned {
     accept("identifier", { case id @ IDENTIFIER(name) => id })
   }
 
-  private def literal: Parser[LITERAL] = positioned {
+  def literal: Parser[LITERAL] = positioned {
     accept("string literal", { case lit @ LITERAL(name) => lit })
+  }
+
+  def number: Parser[NUMBER] = positioned {
+    accept("number", { case num @ NUMBER(name) => num })
   }
 
   def tableName: Parser[Table] = positioned {
@@ -34,41 +38,7 @@ object Parser extends Parsers {
       case _ ~ inputs ~ IDENTIFIER(lastInput) ~ _ => Columns(inputs.map(_._1.str) ++ Seq(lastInput))
     }
   }
-//  val fileReader = scala.io.Source.fromResource("nfc_populate.cql")
-//
-//  val fileContent = fileReader.mkString //getLines.toList.mkString
-//  val queries     = fileContent.split(";")
-  //  println(queries.length)
-//  for (q <- queries) println(q)
-//
-//  trait Query {
-//    def apply(): Map[Any, Any]
-//  }
-//
-//  case class CreateTable(mappa: Map[String, String]) extends Query {
-//    override def apply() =
-//      Map(mappa("keyspace_name")    -> "",
-//          mappa("table_name")       -> "",
-//          mappa("primary_key")      -> "",
-//          mappa("clustering_order") -> "",
-//          mappa("all_fields")       -> "")
-//  }
-//
-//  case class Operation(mappa: Map[String, String]) extends Query {
-//    override def apply() =
-//      Map(
-//        "input_ks"   -> "",
-//        "input_tb"   -> "",
-//        "output_ks"  -> "",
-//        "output_tb"  -> "",
-//        "op_type"    -> "",
-//        "prg_op"     -> "",
-//        "input_ks2"  -> "",
-//        "input_tb2"  -> "",
-//        "key_table"  -> "",
-//        "key_table2" -> ""
-//      )
-//  }
+
   def insertInto: Parser[InsertInto.type] = INSERTINTO() ^^ (_ => InsertInto)
   def valuesKey: Parser[ValuesKey.type]   = VALUES() ^^ (_ => ValuesKey)
   def endQuery: Parser[SemiColon.type]    = SEMICOLON() ^^ (_ => SemiColon)
@@ -97,68 +67,22 @@ object Parser extends Parsers {
     }
   }
 
-  def insertListValue: Parser[InsertListValue] = positioned {
-    (LBRACKET() ~ stringValue ~ COMMA() ~ stringValue ~ COMMA() ~ stringValueList ~ COMMA() ~ stringValueWithOptionList ~ COMMA() ~ stringValueWithOptionList ~ RBRACKET()) ^^ {
-      case _ ~ keySpace ~ _ ~ table ~ _ ~ primaryk ~ _ ~ clusterOrder ~ _ ~ allFields ~ _ =>
-        InsertListValue(keySpace.str, table.str, primaryk.list, clusterOrder.list, allFields.list)
-    }
-  }
-
-  def queryInsert: Parser[QueryInsert] = positioned {
-    (insertInto ~ tableName ~ columns ~ valuesKey ~ insertListValue) ^^ {
-      case insertKey ~ table ~ cols ~ vK ~ colsV => QueryInsert(insertKey, table, cols, vK, colsV)
-    }
-  }
-
   def query: Parser[AST] = positioned {
-    queryInsert | endQuery
+    endQuery
   }
 
   def instructions: Parser[AST] = positioned { rep1(query) ^^ { case stmtList => stmtList reduceRight Query } }
 
   def program: Parser[AST] = positioned { phrase(instructions) }
 
+}
+
+object Parser extends Parser {
   def apply(tokens: Seq[Token]): Either[ParserError, AST] = {
     val reader = new QueryReader(tokens)
     program(reader) match {
       case NoSuccess(msg, next)  => Left(ParserError(Location(next.pos.line, next.pos.column), msg))
       case Success(result, next) => Right(result)
-    }
-  }
-}
-
-object TestParser extends App {
-
-  val input: String =
-    "INSERT INTO config_verticali_nfc.create_table (keyspace_name,table_name,primary_key,clustering_order,all_fields) VALUES " +
-      "('verticali_nfc','list_entita', ['end_sin_sinistro_id','end_por_portafoglio_id','end_en_dan_id'],['end_en_dan_id ASC'],['end_sin_sinistro_id bigint','end_por_portafoglio_id bigint','end_en_dan_id bigint','end_liq_liquidatore_id bigint']);"
-
-  val result: Either[CompilationError, AST] = Compiler(input)
-
-  case class MyQueryInsert(keyspaceName: String,
-                           tableName: String,
-                           primaryKey: Seq[String],
-                           clusteringOrder: Seq[String],
-                           allFields: Seq[String]) {
-    override def toString: String = {
-      s"""
-      |keyspace: $keyspaceName,
-      |table: $tableName,
-      |primary key: $primaryKey,
-      |clustering keys order: $clusteringOrder,
-      |all columns: $allFields
-      |
-      """.stripMargin
-
-    }
-  }
-
-  result.map { query =>
-    query.asInstanceOf[Query].elem1 match {
-      case insert: QueryInsert =>
-        val i = insert.insertValues.asInstanceOf[InsertListValue]
-        println(MyQueryInsert(i.keyspaceName, i.tableName, i.primaryKey, i.clusteringOrder, i.allFields))
-      case r => println("BOH\n" + r)
     }
   }
 }
